@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=82.0.1", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastapi-auth-manager-dep"
+version = "0.1.0"
+authors = [
+  { name="Edmundo Andrade", email="edmon.af@gmail.com" },
+]
+description = "Reusable authentication dependency for FastAPI with **API Key** and **JWT Bearer** support."
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = [
+    "fastapi",
+    "fastapi-auth-middleware",
+    "fastapi-jwt-auth",
+    "fastapi-jwt",
+]
+classifiers = [
+    "Framework :: FastAPI",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Internet",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+    "fastapi>=0.100.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "pyjwt>=2.4.0",
+]
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "httpx>=0.24.0",
+]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.urls]
+Homepage = "https://github.com/edmon1024/fastapi-auth-manager-dep"
+Documentation = "https://github.com/edmon1024/fastapi-auth-manager-dep"
+Repository = "https://github.com/edmon1024/fastapi-auth-manager-dep"
+Issues = "https://github.com/edmon1024/fastapi-auth-manager-dep/issues"
+
