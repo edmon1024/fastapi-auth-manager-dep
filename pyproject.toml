@@ -19,7 +19,6 @@ keywords = [
 ]
 classifiers = [
     "Framework :: FastAPI",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Internet",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -48,6 +47,9 @@ test = [
 ]
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools]
+exclude-package-data = {"fastapi_auth" = ["tests*", "example_app.py"]}
 
 [project.urls]
 Homepage = "https://github.com/edmon1024/fastapi-auth-manager-dep"
