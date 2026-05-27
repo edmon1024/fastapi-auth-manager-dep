@@ -56,4 +56,6 @@ Homepage = "https://github.com/edmon1024/fastapi-auth-manager-dep"
 Documentation = "https://github.com/edmon1024/fastapi-auth-manager-dep"
 Repository = "https://github.com/edmon1024/fastapi-auth-manager-dep"
 Issues = "https://github.com/edmon1024/fastapi-auth-manager-dep/issues"
+Changelog = "https://github.com/edmon1024/fastapi-auth-manager-dep/CHANGELOG.md"
+
 
