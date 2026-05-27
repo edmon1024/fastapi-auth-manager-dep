@@ -7,8 +7,8 @@ import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
-from .dependency import AuthDependency
-from .settings import AuthSettings
+from fastapi_auth.dependency import AuthDependency
+from fastapi_auth.settings import AuthSettings
 
 # ---------------------------------------------------------------------------
 # Fixtures
