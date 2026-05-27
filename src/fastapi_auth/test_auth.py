@@ -7,18 +7,18 @@ import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
-from fastapi_auth_manager.dependency import AuthDependency
-from fastapi_auth_manager.settings import AuthSettings
+from .dependency import AuthDependency
+from .settings import AuthSettings
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
-ADMIN_KEY = "admin-key-secret"
+ADMIN_KEY = "A51zW28CDOJbjyZOTjjMM0x6ON7K3US5XZ3rwTYS2CpkXw0Z3f0MmB9aTPKhMQpWJ55kOJP6iWVewJ"
 REPORTS_KEY_1 = "key-reports-1"
 REPORTS_KEY_2 = "key-reports-2"
 BILLING_KEY = "key-billing-1"
-JWT_SECRET = "jwt-super-secret"
+JWT_SECRET = "RZZZnz0GEdG4ogBvbh7iaOd9t6TbroM2o02auTcD11pBP9C83GnF"
 
 AUTH_API_KEYS = {
     REPORTS_KEY_1: "reports",
