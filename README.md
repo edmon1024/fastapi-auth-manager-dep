@@ -178,14 +178,19 @@ All authentication errors return HTTP `401 Unauthorized` with a `detail` field:
 | Expired JWT                          | `"JWT token has expired"`                 |
 | Invalid JWT signature                | `"Invalid JWT token: ..."`               |
 | Disallowed JWT algorithm             | `"JWT algorithm not allowed: RS256"`      |
+| JWT key misconfigured on the server  | `"Invalid authentication credentials"`   |
+
+> Enabling `"jwt"` without `AUTH_JWT_SECRET_KEY` raises `ValueError` when the
+> `AuthDependency` is created, so the misconfiguration fails at startup.
 
 ---
 
 ## Tests
 
+Development uses [uv](https://docs.astral.sh/uv/); test tools are in the `dev` dependency group:
+
 ```bash
-pip install pytest pytest-asyncio
-pytest tests/ -v
+uv run pytest -v
 ```
 
 Test coverage includes:
@@ -195,6 +200,7 @@ Test coverage includes:
 - Multiple keys sharing the same label
 - `ALL` sentinel and its `"*"` string equivalent
 - Valid JWT, expired JWT, JWT ignored when `"jwt"` is not enabled
+- JWT enabled without a secret (fails at startup, never HTTP 500)
 - No credentials
 - `AUTH_API_KEYS` validation in settings (JSON string, dict, invalid JSON)
 
@@ -226,3 +232,5 @@ async def me(
 async def internal():
     return {"message": "any valid api-key accepted"}
 ```
+
+A runnable version lives in [`examples/example_app.py`](https://github.com/edmon1024/fastapi-auth-manager-dep/blob/main/examples/example_app.py).

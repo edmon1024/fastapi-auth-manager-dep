@@ -5,11 +5,14 @@ Required environment variables for this example:
     AUTH_ADMIN_API_KEY=super-secret-admin
     AUTH_API_KEYS='{"key-reports-1": "reports", "key-billing-1": "billing", "key-billing-2": "billing"}'
     AUTH_JWT_SECRET_KEY=jwt-secret
+
+Run from the repository root with:
+    uv run --with uvicorn uvicorn examples.example_app:app --reload
 """
 
 from fastapi import Depends, FastAPI
 
-from fastapi_auth_manager_dep import AuthDependency, AuthPrincipal, PublicRoute
+from fastapi_auth import AuthDependency, AuthPrincipal, PublicRoute
 
 # Labels must match the values defined in AUTH_API_KEYS
 

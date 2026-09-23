@@ -4,12 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastapi-auth-manager-dep"
-version = "0.1.0"
+version = "0.1.1"
 authors = [
   { name="Edmundo Andrade", email="edmon.af@gmail.com" },
 ]
-description = "Reusable authentication dependency for FastAPI with **API Key** and **JWT Bearer** support."
+description = "Reusable authentication dependency for FastAPI with API Key and JWT Bearer support."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 keywords = [
     "fastapi",
@@ -39,23 +41,32 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "pyjwt>=2.4.0",
 ]
-[project.optional-dependencies]
-test = [
+
+[dependency-groups]
+dev = [
     "pytest>=7.0.0",
-    "pytest-asyncio>=0.21.0",
     "httpx>=0.24.0",
+    "pytest-cov>=7.1.0",
 ]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools]
-exclude-package-data = {"fastapi_auth" = ["tests*", "example_app.py"]}
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["fastapi_auth"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
 
 [project.urls]
 Homepage = "https://github.com/edmon1024/fastapi-auth-manager-dep"
 Documentation = "https://github.com/edmon1024/fastapi-auth-manager-dep"
 Repository = "https://github.com/edmon1024/fastapi-auth-manager-dep"
 Issues = "https://github.com/edmon1024/fastapi-auth-manager-dep/issues"
-Changelog = "https://github.com/edmon1024/fastapi-auth-manager-dep/CHANGELOG.md"
+Changelog = "https://github.com/edmon1024/fastapi-auth-manager-dep/blob/main/CHANGELOG.md"
 
 

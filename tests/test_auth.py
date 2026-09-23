@@ -1,6 +1,6 @@
 """
 Unit tests for AuthDependency with the AUTH_API_KEYS system.
-Run with: pytest tests/test_auth.py -v
+Run with: uv run pytest tests/test_auth.py -v
 """
 
 import pytest
@@ -208,6 +208,44 @@ async def test_billing_endpoint_accepts_jwt(auth_billing_and_jwt):
     principal = await auth_billing_and_jwt(credentials=creds, api_key=None)
     assert principal.sub == "user-456"
     assert principal.method == "jwt"
+
+
+# ---------------------------------------------------------------------------
+# JWT without AUTH_JWT_SECRET_KEY (fail closed)
+# ---------------------------------------------------------------------------
+
+def test_jwt_enabled_without_secret_raises_at_init():
+    # Explicit "" so a local .env / envvar can't leak a secret into the test
+    s = AuthSettings(AUTH_ADMIN_API_KEY=ADMIN_KEY, AUTH_JWT_SECRET_KEY="")
+    with pytest.raises(ValueError, match="AUTH_JWT_SECRET_KEY"):
+        AuthDependency(valid_token_types={"jwt"}, settings=s)
+
+
+@pytest.mark.anyio
+async def test_api_keys_work_without_jwt_secret():
+    """No JWT secret is needed when "jwt" is not enabled."""
+    s = AuthSettings(
+        AUTH_ADMIN_API_KEY=ADMIN_KEY,
+        AUTH_API_KEYS=AUTH_API_KEYS,
+        AUTH_JWT_SECRET_KEY="",
+    )
+    dep = AuthDependency(valid_token_types={"reports"}, settings=s)
+    principal = await dep(credentials=None, api_key=REPORTS_KEY_1)
+    assert principal.role == "reports"
+
+
+@pytest.mark.anyio
+async def test_jwt_key_error_returns_401_not_500(settings):
+    """A server-side key error (pyjwt InvalidKeyError) must still be a 401."""
+    import jwt as pyjwt
+    dep = AuthDependency(valid_token_types={"jwt"}, settings=settings)
+    token = pyjwt.encode({"sub": "user-x"}, JWT_SECRET, algorithm="HS256")
+    settings.AUTH_JWT_SECRET_KEY = ""  # key becomes unusable after startup
+    creds = HTTPAuthorizationCredentials(scheme="bearer", credentials=token)
+    with pytest.raises(HTTPException) as exc:
+        await dep(credentials=creds, api_key=None)
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "Invalid authentication credentials"
 
 
 # ---------------------------------------------------------------------------

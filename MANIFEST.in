@@ -1,3 +1,0 @@
-exclude src/fastapi_auth/example_app.py
-recursive-exclude src/fastapi_auth/tests *
-recursive-exclude src/fastapi_auth/__pycache__ *
