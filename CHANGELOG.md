@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- With authentication applied globally (`FastAPI(dependencies=[...])`), `PublicRoute`
+  did not opt endpoints out and a route-level `AuthDependency` could not accept keys
+  the global one rejected, so both documented patterns returned `401`. The most
+  specific declaration on the route now takes precedence; on a `PublicRoute` the
+  global dependency returns `None`.
 - Enabling `"jwt"` in `valid_token_types` without `AUTH_JWT_SECRET_KEY` returned
   HTTP 500 on every JWT request. `AuthDependency` now raises `ValueError` at
   creation, so the misconfiguration fails at startup.
