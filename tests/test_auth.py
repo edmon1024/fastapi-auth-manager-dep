@@ -4,10 +4,12 @@ Run with: uv run pytest tests/test_auth.py -v
 """
 
 import pytest
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.testclient import TestClient
 
 from fastapi_auth.dependency import AuthDependency
+from fastapi_auth.public import PublicRoute
 from fastapi_auth.settings import AuthSettings
 
 # ---------------------------------------------------------------------------
@@ -257,6 +259,91 @@ async def test_no_credentials_raises_401(auth_default):
     with pytest.raises(HTTPException) as exc:
         await auth_default(credentials=None, api_key=None)
     assert exc.value.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Global auth: the most specific route declaration wins (HTTP level)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def client(settings):
+    app = FastAPI(dependencies=[Depends(AuthDependency(settings=settings))])
+
+    @app.get("/admin-only")
+    async def admin_only():
+        return {"ok": True}
+
+    @app.get("/health", dependencies=[Depends(PublicRoute())])
+    async def health():
+        return {"ok": True}
+
+    @app.get(
+        "/reports",
+        dependencies=[Depends(AuthDependency(valid_token_types={"reports"}, settings=settings))],
+    )
+    async def reports():
+        return {"ok": True}
+
+    @app.get("/me")
+    async def me(
+        principal=Depends(AuthDependency(valid_token_types={"billing"}, settings=settings)),
+    ):
+        return {"role": principal.role}
+
+    # Router allows every key, the route narrows it down to "reports"
+    router = APIRouter(
+        dependencies=[Depends(AuthDependency(valid_token_types=AuthDependency.ALL, settings=settings))],
+    )
+
+    @router.get("/router/any")
+    async def router_any():
+        return {"ok": True}
+
+    @router.get(
+        "/router/reports",
+        dependencies=[Depends(AuthDependency(valid_token_types={"reports"}, settings=settings))],
+    )
+    async def router_reports():
+        return {"ok": True}
+
+    app.include_router(router)
+    return TestClient(app)
+
+
+def _get(client, path, key=None):
+    headers = {"X-API-Key": key} if key else {}
+    return client.get(path, headers=headers).status_code
+
+
+def test_global_auth_applies_without_route_override(client):
+    assert _get(client, "/admin-only", ADMIN_KEY) == 200
+    assert _get(client, "/admin-only", REPORTS_KEY_1) == 401
+    assert _get(client, "/admin-only") == 401
+
+
+def test_public_route_skips_global_auth(client):
+    assert _get(client, "/health") == 200
+    assert _get(client, "/health", "not-registered-key") == 200
+
+
+def test_route_auth_widens_global_admin_only(client):
+    assert _get(client, "/reports", REPORTS_KEY_1) == 200
+    assert _get(client, "/reports", ADMIN_KEY) == 200
+    assert _get(client, "/reports", BILLING_KEY) == 401
+    assert _get(client, "/reports") == 401
+
+
+def test_handler_parameter_overrides_global_and_returns_principal(client):
+    response = client.get("/me", headers={"X-API-Key": BILLING_KEY})
+    assert response.status_code == 200
+    assert response.json() == {"role": "billing"}
+    assert _get(client, "/me", REPORTS_KEY_1) == 401
+
+
+def test_route_auth_narrows_router_auth(client):
+    assert _get(client, "/router/any", BILLING_KEY) == 200
+    assert _get(client, "/router/reports", REPORTS_KEY_1) == 200
+    assert _get(client, "/router/reports", BILLING_KEY) == 401
 
 
 # ---------------------------------------------------------------------------

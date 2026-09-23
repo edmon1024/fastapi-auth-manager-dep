@@ -3,10 +3,11 @@ from enum import Enum
 from typing import Optional
 
 import jwt as pyjwt
-from fastapi import HTTPException, Security, status
+from fastapi import HTTPException, Request, Security, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from .enums import AuthMethod
+from .public import PublicRoute
 from .schemas import AuthPrincipal
 from .settings import AuthSettings, get_auth_settings
 
@@ -73,6 +74,14 @@ class AuthDependency:
         @router.get("/me")
         async def me(principal: AuthPrincipal = Depends(AuthDependency(...))):
             return principal
+
+    Precedence
+    ----------
+    The most specific declaration wins. An instance applied globally (app or
+    router ``dependencies``) defers to a ``PublicRoute`` or another
+    ``AuthDependency`` declared later on the route (router, route
+    ``dependencies`` or handler parameter). Only top-level route dependencies
+    are considered, not ones nested inside other dependencies.
     """
 
     #: Sentinel to allow all additional api-keys without label filtering.
@@ -228,24 +237,58 @@ class AuthDependency:
         return self._settings.label_for_key(api_key) or "unknown"
 
     # ------------------------------------------------------------------
+    # Route precedence
+    # ------------------------------------------------------------------
+
+    def _overriding_dependency(
+        self, request: Optional[Request]
+    ) -> "AuthDependency | PublicRoute | None":
+        """
+        Returns the more specific ``AuthDependency`` / ``PublicRoute`` declared
+        on the matched route, or ``None`` if this instance is the one to apply.
+        """
+        route = request.scope.get("route") if request is not None else None
+        dependant = getattr(route, "dependant", None)
+        if dependant is None:
+            return None
+
+        calls = [dep.call for dep in dependant.dependencies]
+        # Not in the route's list → applied globally, every route declaration
+        # is more specific. Otherwise only the ones declared after it are.
+        later = calls[calls.index(self) + 1:] if self in calls else calls
+        markers = [c for c in later if isinstance(c, (AuthDependency, PublicRoute))]
+        return markers[-1] if markers else None
+
+    # ------------------------------------------------------------------
     # Main callable
     # ------------------------------------------------------------------
 
     async def __call__(
         self,
+        request: Request = None,  # type: ignore[assignment]
         credentials: Optional[HTTPAuthorizationCredentials] = Security(_bearer_scheme),
         api_key: Optional[str] = Security(_api_key_header),
-    ) -> AuthPrincipal:
+    ) -> Optional[AuthPrincipal]:
         """
         Evaluation order:
+        0. Precedence  → defer to a more specific ``PublicRoute`` (no auth,
+           returns ``None``) or ``AuthDependency`` on the route.
         1. JWT Bearer  → if ``"jwt"`` is enabled and a Bearer token is present.
         2. API Key     → if the ``X-API-Key`` header is present.
         3. 401         → no valid mechanism found.
 
         Returns
         -------
-        :class:`AuthPrincipal` with method, sub, role, and optional payload.
+        :class:`AuthPrincipal` with method, sub, role, and optional payload,
+        or ``None`` on a public route.
         """
+        # 0. A more specific declaration on the route takes over
+        override = self._overriding_dependency(request)
+        if isinstance(override, PublicRoute):
+            return None
+        if override is not None:
+            return await override(request, credentials, api_key)
+
         # 1. JWT
         jwt_enabled = "jwt" in self._valid_token_types
         if jwt_enabled and credentials and credentials.scheme.lower() == "bearer":

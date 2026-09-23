@@ -16,7 +16,8 @@ class PublicRoute:
     When authentication is configured globally on the app
     (via ``app = FastAPI(dependencies=[Depends(AuthDependency())])``),
     use this dependency to opt specific endpoints out of authentication.
-    It accepts any request without validation.
+    It accepts any request without validation; the global ``AuthDependency``
+    detects it on the matched route and skips authentication.
 
     Usage
     -----

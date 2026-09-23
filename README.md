@@ -61,6 +61,11 @@ from fastapi_auth import AuthDependency
 app = FastAPI(dependencies=[Depends(AuthDependency())])
 ```
 
+The most specific declaration wins: an `AuthDependency` or `PublicRoute` declared on a
+router, on a route's `dependencies` or as a handler parameter replaces the global one for
+that route, so it can widen access (e.g. accept `"reports"` keys) as well as narrow it.
+Only top-level route dependencies count, not ones nested inside your own dependencies.
+
 ### 2. Restrict by api-key label
 
 Only the ADMIN key and keys labelled `"reports"` can access:
@@ -129,7 +134,8 @@ async def me(
 
 ### 6. Public endpoint (opt-out of global auth)
 
-When auth is configured globally, use `PublicRoute` to exclude specific endpoints:
+When auth is configured globally, use `PublicRoute` to exclude specific endpoints
+(requests are accepted with or without credentials):
 
 ```python
 from fastapi_auth import PublicRoute
@@ -202,6 +208,7 @@ Test coverage includes:
 - Valid JWT, expired JWT, JWT ignored when `"jwt"` is not enabled
 - JWT enabled without a secret (fails at startup, never HTTP 500)
 - No credentials
+- Global auth over HTTP: `PublicRoute` opt-out, route-level widening/narrowing, principal from a handler parameter
 - `AUTH_API_KEYS` validation in settings (JSON string, dict, invalid JSON)
 
 ---
