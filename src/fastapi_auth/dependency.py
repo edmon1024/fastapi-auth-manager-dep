@@ -90,9 +90,14 @@ class AuthDependency:
             - ``None``                       → ADMIN key only.
             - ``{"role-a"}``                 → ADMIN key + keys labelled ``"role-a"``.
             - ``AuthDependency.ALL`` / ``"*"`` → ADMIN key + all additional keys.
-            - Include ``"jwt"`` to enable user JWT authentication.
+            - Include ``"jwt"`` to enable user JWT authentication
+              (requires ``AUTH_JWT_SECRET_KEY``).
         settings:
             Configuration injection. Defaults to ``get_auth_settings()``.
+
+        Raises
+        ------
+        ValueError if ``"jwt"`` is enabled but ``AUTH_JWT_SECRET_KEY`` is empty.
         """
         self._settings = settings or get_auth_settings()
         self._allow_all_keys: bool = valid_token_types is _ALL or valid_token_types == "*"
@@ -101,6 +106,12 @@ class AuthDependency:
             self._valid_token_types: set[str] = set()
         else:
             self._valid_token_types = self._normalize(valid_token_types)
+
+        # Fail at startup instead of on every request
+        if "jwt" in self._valid_token_types and not self._settings.AUTH_JWT_SECRET_KEY:
+            raise ValueError(
+                "AUTH_JWT_SECRET_KEY must be set when 'jwt' is in valid_token_types."
+            )
 
     # ------------------------------------------------------------------
     # Static helpers
@@ -183,6 +194,14 @@ class AuthDependency:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Invalid JWT token: {exc}",
+            )
+        except pyjwt.PyJWTError:
+            # e.g. InvalidKeyError: a server-side key problem, not the caller's
+            # token; don't leak details and don't turn it into a 500.
+            logger.exception("AUTH: JWT verification failed due to a key error")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
             )
 
     # ------------------------------------------------------------------
