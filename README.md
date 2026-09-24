@@ -79,6 +79,91 @@ AUTH_JWT_KEYS='{
   `AUTH_JWT_KEYS='{"default": {"secret": "...", "require": []}}'` — tokens without `kid`
   keep working. Setting both `AUTH_JWT_SECRET_KEY` and a `"default"` key is an error.
 
+### Issuing JWT tokens with `kid`
+
+The service that issues tokens puts the key id in the JWT **header** (`kid`) and signs
+with that key's `secret`, using one of its `algorithms`. With the `AUTH_JWT_KEYS` example
+above, using [PyJWT](https://pyjwt.readthedocs.io/):
+
+```python
+import time
+
+import jwt
+
+now = int(time.time())
+
+# "mobile" key: HS256, requires exp (default)
+mobile_token = jwt.encode(
+    {"sub": "user-123", "exp": now + 3600},
+    "mobile-secret",
+    algorithm="HS256",
+    headers={"kid": "mobile"},
+)
+
+# "partner" key: HS512, audience, issuer, requires exp and sub
+partner_token = jwt.encode(
+    {"sub": "partner-42", "aud": "billing-api", "iss": "partner-sso", "exp": now + 3600},
+    "partner-secret",
+    algorithm="HS512",
+    headers={"kid": "partner"},
+)
+```
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/me
+```
+
+The token's header decodes to `{"alg": "HS256", "kid": "mobile", "typ": "JWT"}`. How the
+server handles it:
+
+1. It reads `kid` from the unverified header and looks up that key. A `kid` not in
+   `AUTH_JWT_KEYS`, or not allowed on the endpoint (`"jwt:<id>"`), is rejected with
+   `"JWT key not allowed"`.
+2. It checks `alg` against that key's `algorithms`.
+3. It verifies the signature with that key's `secret`, and the claims with its
+   `audience` / `issuer` / `leeway` / `require`.
+4. The handler receives the key id in `AuthPrincipal.key_id` (`"mobile"`).
+
+Things to know:
+
+- `kid` goes in the header (`headers={"kid": ...}`). A `kid` **claim** in the payload is
+  ignored: the token counts as having no `kid`.
+- Without `kid`, the token is verified with the [`"default"` key](#the-default-key). If
+  there is none, it is rejected with `"JWT key id (kid) is required"`.
+- `kid` does not grant anything by itself. A token that says `kid: "partner"` but was
+  signed with another secret fails the signature check.
+- Use a different secret per key. HMAC secrets should be at least as long as the hash
+  (32 bytes for HS256, 64 for HS512); PyJWT warns about shorter ones.
+
+### The `"default"` key
+
+`"default"` is a reserved key id: it is the key used by tokens **without** `kid`. It comes
+from one of two places, never both:
+
+| Configuration | `"default"` key |
+|---|---|
+| Single secret (deprecated): `AUTH_JWT_SECRET_KEY=...` | Created from that secret, with `AUTH_JWT_ALGORITHMS` and no required claims (0.1.x behaviour) |
+| `AUTH_JWT_KEYS='{"default": {"secret": "..."}}'` | The entry you define, with its own algorithms, audience, issuer, leeway and `require` (default `["exp"]`) |
+
+Setting `AUTH_JWT_SECRET_KEY` together with a `"default"` entry in `AUTH_JWT_KEYS` raises a
+`ValueError`. The single secret can be combined with other keys (`"mobile"`, `"partner"`...):
+it becomes `"default"` next to them.
+
+Like any other key, it can be selected on an endpoint with `"jwt:default"`:
+
+```python
+# Only tokens verified with the "default" key (plus the ADMIN key)
+@app.get("/legacy", dependencies=[Depends(AuthDependency(valid_token_types={"jwt:default"}))])
+async def legacy():
+    ...
+```
+
+- Tokens without `kid`, or with `kid: "default"`, are accepted there. Tokens signed with
+  other keys (`kid: "mobile"`) get `"JWT key not allowed"`.
+- `"jwt:default"` with no `"default"` key configured raises `ValueError` at startup.
+- With only one token issuer, you can use either `"jwt"` or `"jwt:default"`: both accept the
+  same tokens. `"jwt:default"` keeps the endpoint closed to keys added later.
+
 ### `.env` example
 
 ```dotenv
@@ -123,6 +208,9 @@ async def get_reports():
 ```
 
 ### 3. Combine api-key and JWT on the same endpoint
+
+Tokens pick their key with the `kid` header; see
+[Issuing JWT tokens with `kid`](#issuing-jwt-tokens-with-kid).
 
 ```python
 from fastapi_auth import AuthDependency
@@ -198,6 +286,7 @@ async def health():
 | `AuthDependency.ALL` / `"*"` | Yes       | All                     | No       |
 | `{"jwt"}`                    | Yes       | No                      | Any key  |
 | `{"jwt:partner"}`            | Yes       | No                      | `partner` key only |
+| `{"jwt:default"}`            | Yes       | No                      | `default` key only (tokens without `kid`) |
 
 > The ADMIN key is always valid regardless of the endpoint configuration.
 
@@ -255,7 +344,7 @@ Test coverage includes:
 - Valid JWT, expired JWT, JWT ignored when `"jwt"` is not enabled
 - JWT enabled without a secret (fails at startup, never HTTP 500)
 - No credentials
-- Multiple JWT keys: `kid` selection, `"jwt:<id>"` restriction, `"default"` key for tokens without `kid`, per-key algorithms, audience, issuer, leeway and required claims
+- Multiple JWT keys: `kid` selection, `"jwt:<id>"` restriction, `"default"` key for tokens without `kid`, `kid` only read from the header (a `kid` claim is ignored), `"jwt:default"` with the single secret or an explicit `"default"` key, per-key algorithms, audience, issuer, leeway and required claims
 - `AUTH_JWT_KEYS` validation and the deprecated `AUTH_JWT_SECRET_KEY` alias
 - Installing without the `jwt` extra
 - Global auth over HTTP: `PublicRoute` opt-out, route-level widening/narrowing, principal from a handler parameter
