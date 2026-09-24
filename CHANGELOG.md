@@ -5,6 +5,35 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - Unreleased
+
+### Added
+
+- `AUTH_JWT_KEYS`: multiple JWT keys selected by the token's `kid` header, each with its
+  own secret, algorithms (HMAC only), `audience`, `issuer`, `leeway` and required claims.
+  Tokens without `kid` use the key with id `"default"`.
+- `"jwt:<key-id>"` in `valid_token_types` restricts an endpoint to specific JWT keys;
+  unknown ids raise `ValueError` at startup.
+- `AuthPrincipal.key_id`: id of the JWT key that verified the token.
+- `jwt` and `all` extras.
+
+### Changed
+
+- **Breaking:** `pyjwt` is now optional. Install `fastapi-auth-manager-dep[jwt]` to use
+  JWT; enabling `"jwt"` without it raises `ImportError` at startup.
+- **Breaking:** keys defined in `AUTH_JWT_KEYS` require the `exp` claim by default
+  (`"require": []` disables it). The deprecated `AUTH_JWT_SECRET_KEY` keeps the 0.1.x
+  behaviour.
+- New 401 details: `"JWT key not allowed"` and `"JWT key id (kid) is required"`.
+- Tests use `httpx2` for Starlette's `TestClient`; CI smoke-tests the wheel with and
+  without the `jwt` extra and audits all extras.
+
+### Deprecated
+
+- `AUTH_JWT_SECRET_KEY` and `AUTH_JWT_ALGORITHMS`: still accepted as the `"default"`
+  key (with a `DeprecationWarning`); use `AUTH_JWT_KEYS`. Setting both
+  `AUTH_JWT_SECRET_KEY` and a `"default"` key is an error.
+
 ## [0.1.1] - 2026-09-24
 
 ### Fixed
@@ -52,5 +81,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PublicRoute`: opt-out dependency for public endpoints under global authentication.
 - `401 Unauthorized` responses with specific `detail` messages.
 
+[0.2.0]: https://github.com/edmon1024/fastapi-auth-manager-dep/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/edmon1024/fastapi-auth-manager-dep/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/edmon1024/fastapi-auth-manager-dep/releases/tag/v0.1.0

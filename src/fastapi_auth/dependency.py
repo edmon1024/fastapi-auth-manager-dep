@@ -2,16 +2,24 @@ import logging
 from enum import Enum
 from typing import Optional
 
-import jwt as pyjwt
 from fastapi import HTTPException, Request, Security, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from .enums import AuthMethod
 from .public import PublicRoute
 from .schemas import AuthPrincipal
-from .settings import AuthSettings, get_auth_settings
+from .settings import DEFAULT_JWT_KEY_ID, AuthSettings, JWTKeyConfig, get_auth_settings
+
+# pyjwt is optional: pip install "fastapi-auth-manager-dep[jwt]"
+try:
+    import jwt as pyjwt
+except ImportError:  # pragma: no cover - exercised by the smoke test without extras
+    pyjwt = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
+
+_JWT = "jwt"
+_JWT_PREFIX = "jwt:"
 
 # Security schemes shared across all instances (module-level singletons)
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -29,7 +37,14 @@ class AuthDependency:
     --------------------
     - **API Key** via ``X-API-Key`` header
     - **JWT Bearer** via ``Authorization: Bearer <token>`` header
-      (only when ``"jwt"`` is included in ``valid_token_types``)
+      (only when ``"jwt"`` or ``"jwt:<key-id>"`` is included in ``valid_token_types``;
+      requires the ``jwt`` extra)
+
+    JWT keys
+    --------
+    Keys are defined in the ``AUTH_JWT_KEYS`` envvar. The token's ``kid`` header
+    selects the key; tokens without ``kid`` use the key with id ``"default"``.
+    ``"jwt"`` accepts every configured key, ``"jwt:<key-id>"`` only that one.
 
     Api-key logic
     -------------
@@ -99,14 +114,17 @@ class AuthDependency:
             - ``None``                       → ADMIN key only.
             - ``{"role-a"}``                 → ADMIN key + keys labelled ``"role-a"``.
             - ``AuthDependency.ALL`` / ``"*"`` → ADMIN key + all additional keys.
-            - Include ``"jwt"`` to enable user JWT authentication
-              (requires ``AUTH_JWT_SECRET_KEY``).
+            - Include ``"jwt"`` to enable user JWT authentication with any key
+              in ``AUTH_JWT_KEYS`` (or the deprecated ``AUTH_JWT_SECRET_KEY``),
+              or ``"jwt:<key-id>"`` to accept only that key.
         settings:
             Configuration injection. Defaults to ``get_auth_settings()``.
 
         Raises
         ------
-        ValueError if ``"jwt"`` is enabled but ``AUTH_JWT_SECRET_KEY`` is empty.
+        ImportError if JWT is enabled but pyjwt is not installed.
+        ValueError if JWT is enabled but no JWT key is configured, or a
+        ``"jwt:<key-id>"`` refers to an unknown key.
         """
         self._settings = settings or get_auth_settings()
         self._allow_all_keys: bool = valid_token_types is _ALL or valid_token_types == "*"
@@ -117,10 +135,35 @@ class AuthDependency:
             self._valid_token_types = self._normalize(valid_token_types)
 
         # Fail at startup instead of on every request
-        if "jwt" in self._valid_token_types and not self._settings.AUTH_JWT_SECRET_KEY:
-            raise ValueError(
-                "AUTH_JWT_SECRET_KEY must be set when 'jwt' is in valid_token_types."
+        self._jwt_keys = self._resolve_jwt_keys()
+
+    def _resolve_jwt_keys(self) -> "dict[str, JWTKeyConfig]":
+        """Returns the JWT keys this instance accepts, by id (empty → JWT disabled)."""
+        wanted = {t for t in self._valid_token_types if t == _JWT or t.startswith(_JWT_PREFIX)}
+        if not wanted:
+            return {}
+
+        if pyjwt is None:
+            raise ImportError(
+                "JWT authentication requires pyjwt: "
+                "pip install 'fastapi-auth-manager-dep[jwt]'"
             )
+
+        configured = self._settings.jwt_keys()
+        if not configured:
+            raise ValueError(
+                "AUTH_JWT_KEYS (or the deprecated AUTH_JWT_SECRET_KEY) must be set "
+                "when 'jwt' is in valid_token_types."
+            )
+
+        if _JWT in wanted:
+            return configured
+
+        ids = {t[len(_JWT_PREFIX):] for t in wanted}
+        unknown = sorted(ids - set(configured))
+        if unknown:
+            raise ValueError(f"Unknown JWT key ids in valid_token_types: {unknown}")
+        return {key_id: configured[key_id] for key_id in ids}
 
     # ------------------------------------------------------------------
     # Static helpers
@@ -160,8 +203,8 @@ class AuthDependency:
             allowed.update(k for k in self._settings.AUTH_API_KEYS if k)
         else:
             for label in self._valid_token_types:
-                if label == "jwt":
-                    continue  # label is "jwt", which indicates JWT auth, not an api-key
+                if label == _JWT or label.startswith(_JWT_PREFIX):
+                    continue  # JWT selector, not an api-key label
                 allowed.update(self._settings.keys_for_label(label))
 
         return allowed
@@ -170,28 +213,44 @@ class AuthDependency:
     # JWT verification
     # ------------------------------------------------------------------
 
-    def _verify_jwt(self, token: str) -> dict:
+    def _verify_jwt(self, token: str) -> tuple[str, dict]:
         """
-        Decodes and validates an HMAC JWT.
+        Selects the key by ``kid``, then decodes and validates an HMAC JWT.
+
+        Returns
+        -------
+        ``(key_id, payload)``.
 
         Raises
         ------
-        HTTPException 401 for invalid, expired, or disallowed-algorithm tokens.
+        HTTPException 401 for invalid, expired, unknown-key or
+        disallowed-algorithm tokens.
         """
         try:
             header = pyjwt.get_unverified_header(token)
+            kid = header.get("kid", DEFAULT_JWT_KEY_ID)
+            key = self._jwt_keys.get(kid) if isinstance(kid, str) else None
+            if key is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="JWT key not allowed" if "kid" in header else "JWT key id (kid) is required",
+                )
             alg = header.get("alg")
-            if alg not in self._settings.AUTH_JWT_ALGORITHMS:
+            if alg not in key.algorithms:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail=f"JWT algorithm not allowed: {alg}",
                 )
             payload = pyjwt.decode(
                 token,
-                self._settings.AUTH_JWT_SECRET_KEY,
-                algorithms=self._settings.AUTH_JWT_ALGORITHMS,
+                key.secret,
+                algorithms=key.algorithms,
+                audience=key.audience,
+                issuer=key.issuer,
+                leeway=key.leeway,
+                options={"require": key.require},
             )
-            return payload
+            return kid, payload
         except HTTPException:
             raise
         except pyjwt.ExpiredSignatureError:
@@ -290,13 +349,13 @@ class AuthDependency:
             return await override(request, credentials, api_key)
 
         # 1. JWT
-        jwt_enabled = "jwt" in self._valid_token_types
-        if jwt_enabled and credentials and credentials.scheme.lower() == "bearer":
-            payload = self._verify_jwt(credentials.credentials)
+        if self._jwt_keys and credentials and credentials.scheme.lower() == "bearer":
+            key_id, payload = self._verify_jwt(credentials.credentials)
             return AuthPrincipal(
                 method=AuthMethod.JWT,
                 sub=payload.get("sub", ""),
                 payload=payload,
+                key_id=key_id,
             )
 
         # 2. API Key

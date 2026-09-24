@@ -12,6 +12,10 @@ from fastapi_auth.dependency import AuthDependency
 from fastapi_auth.public import PublicRoute
 from fastapi_auth.settings import AuthSettings
 
+# These tests keep the deprecated single-secret config on purpose (backward
+# compatibility); AUTH_JWT_KEYS is covered in test_jwt_keys.py.
+pytestmark = pytest.mark.filterwarnings("ignore:AUTH_JWT_SECRET_KEY:DeprecationWarning")
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -242,12 +246,17 @@ async def test_jwt_key_error_returns_401_not_500(settings):
     import jwt as pyjwt
     dep = AuthDependency(valid_token_types={"jwt"}, settings=settings)
     token = pyjwt.encode({"sub": "user-x"}, JWT_SECRET, algorithm="HS256")
-    settings.AUTH_JWT_SECRET_KEY = ""  # key becomes unusable after startup
+    dep._jwt_keys["default"].secret = ""  # key becomes unusable after startup
     creds = HTTPAuthorizationCredentials(scheme="bearer", credentials=token)
     with pytest.raises(HTTPException) as exc:
         await dep(credentials=creds, api_key=None)
+    # Recent pyjwt raises InvalidKeyError for an empty HMAC key (our generic
+    # detail); older releases just fail the signature check. Both are 401.
     assert exc.value.status_code == 401
-    assert exc.value.detail == "Invalid authentication credentials"
+    assert exc.value.detail in {
+        "Invalid authentication credentials",
+        "Invalid JWT token: Signature verification failed",
+    }
 
 
 # ---------------------------------------------------------------------------

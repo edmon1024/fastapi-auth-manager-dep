@@ -15,9 +15,11 @@ class AuthPrincipal(BaseModel):
     sub     : Subject identifier (``user_id`` for JWT, raw key value for api-key).
     role    : Api-key label/role (``"admin"``, ``"reports"``…). None for JWT.
     payload : Full JWT payload. None for api-key.
+    key_id  : Id of the JWT key that verified the token. None for api-key.
     """
 
     method: AuthMethod
     sub: str
     role: Optional[str] = None
     payload: Optional[dict[str, Any]] = None
+    key_id: Optional[str] = None
