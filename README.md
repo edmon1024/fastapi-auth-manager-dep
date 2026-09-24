@@ -5,7 +5,7 @@ Reusable authentication dependency for FastAPI with **API Key** and **JWT Bearer
 - One mandatory ADMIN key via envvar (super-key, always valid)
 - Additional api-keys with labels/roles via JSON envvar
 - Fine-grained per-endpoint control: which roles each endpoint accepts
-- HMAC JWT with configurable algorithms
+- HMAC JWT with multiple keys (`kid`), per-key algorithms, audience, issuer and required claims
 - Public endpoints via explicit opt-out
 
 ---
@@ -13,8 +13,13 @@ Reusable authentication dependency for FastAPI with **API Key** and **JWT Bearer
 ## Install
 
 ```bash
-pip install fastapi-auth-manager-dep
+pip install fastapi-auth-manager-dep          # api-keys only
+pip install "fastapi-auth-manager-dep[jwt]"   # + JWT Bearer (installs pyjwt)
+pip install "fastapi-auth-manager-dep[all]"   # everything
 ```
+
+JWT support needs the `jwt` extra: enabling `"jwt"` without pyjwt installed raises
+`ImportError` when the `AuthDependency` is created.
 
 ---
 
@@ -24,8 +29,9 @@ pip install fastapi-auth-manager-dep
 |-------------------|----------|-------------------------------------------------------------------------------|
 | `AUTH_ADMIN_API_KEY`         | Yes      | Administrator api-key. Super-key: valid on every endpoint.                    |
 | `AUTH_API_KEYS`        | No       | JSON object mapping api-keys to their labels. See format below.               |
-| `AUTH_JWT_SECRET_KEY`| No*      | HMAC secret key for verifying user JWTs. Required when using `"jwt"`. |
-| `AUTH_JWT_ALGORITHMS`  | No       | List of allowed algorithms (default: `["HS256", "HS384", "HS512"]`).          |
+| `AUTH_JWT_KEYS`        | No*      | JSON object mapping JWT key ids to their settings. See format below. Required when using `"jwt"`. |
+| `AUTH_JWT_SECRET_KEY`| No       | **Deprecated** — single HMAC secret, same as `AUTH_JWT_KEYS={"default": {...}}` with no required claims. |
+| `AUTH_JWT_ALGORITHMS`  | No       | **Deprecated** — algorithms for `AUTH_JWT_SECRET_KEY` (default: `["HS256", "HS384", "HS512"]`). |
 
 ### `AUTH_API_KEYS` format
 
@@ -38,12 +44,40 @@ AUTH_API_KEYS='{"key-abc123": "reports", "key-xyz789": "billing", "key-qrs456": 
 - Multiple keys can share the same label (same role).
 - Empty string (`AUTH_API_KEYS=""`) is equivalent to having no additional keys.
 
+### `AUTH_JWT_KEYS` format
+
+A JSON object where each key is a key id and the value its settings:
+
+```bash
+AUTH_JWT_KEYS='{
+  "mobile":  {"secret": "mobile-secret", "algorithms": ["HS256"]},
+  "partner": {"secret": "partner-secret", "algorithms": ["HS512"], "audience": "billing-api",
+              "issuer": "partner-sso", "leeway": 30, "require": ["exp", "sub"]}
+}'
+```
+
+| Field        | Required | Default                        | Description |
+|--------------|----------|--------------------------------|-------------|
+| `secret`     | Yes      | —                              | HMAC secret (non-empty). |
+| `algorithms` | No       | `["HS256", "HS384", "HS512"]`  | Allowed algorithms; HMAC only. |
+| `audience`   | No       | not checked                    | Expected `aud` claim (string or list). |
+| `issuer`     | No       | not checked                    | Expected `iss` claim. |
+| `leeway`     | No       | `0`                            | Clock-skew tolerance in seconds for `exp`/`nbf`/`iat`. |
+| `require`    | No       | `["exp"]`                      | Claims that must be present; `[]` disables it. |
+
+- Tokens select their key with the `kid` header. Tokens without `kid` are verified
+  with the key whose id is `"default"`, if there is one; otherwise they are rejected.
+- Key ids cannot be empty or contain `:`.
+- Migrating from `AUTH_JWT_SECRET_KEY`: move the secret to
+  `AUTH_JWT_KEYS='{"default": {"secret": "...", "require": []}}'` — tokens without `kid`
+  keep working. Setting both `AUTH_JWT_SECRET_KEY` and a `"default"` key is an error.
+
 ### `.env` example
 
 ```dotenv
 AUTH_ADMIN_API_KEY=super-secret-admin-key
 AUTH_API_KEYS={"key-reports-1": "reports", "key-billing-1": "billing", "key-billing-2": "billing"}
-AUTH_JWT_SECRET_KEY=my-jwt-secret-key
+AUTH_JWT_KEYS={"mobile": {"secret": "mobile-secret"}, "partner": {"secret": "partner-secret", "audience": "billing-api"}}
 ```
 
 ---
@@ -155,7 +189,8 @@ async def health():
 | `{"reports"}`                | Yes       | `reports` label only    | No       |
 | `{"billing", "jwt"}`         | Yes       | `billing` label only    | Yes      |
 | `AuthDependency.ALL` / `"*"` | Yes       | All                     | No       |
-| `{"jwt"}`                    | Yes       | No                      | Yes      |
+| `{"jwt"}`                    | Yes       | No                      | Any key  |
+| `{"jwt:partner"}`            | Yes       | No                      | `partner` key only |
 
 > The ADMIN key is always valid regardless of the endpoint configuration.
 
@@ -169,6 +204,7 @@ class AuthPrincipal(BaseModel):
     sub:     str                  # user_id (JWT) or raw api-key value
     role:    str | None = None    # key role/label; None for JWT
     payload: dict | None = None   # full JWT payload; None for api-key
+    key_id:  str | None = None    # id of the JWT key that verified the token; None for api-key
 ```
 
 ---
@@ -184,10 +220,14 @@ All authentication errors return HTTP `401 Unauthorized` with a `detail` field:
 | Expired JWT                          | `"JWT token has expired"`                 |
 | Invalid JWT signature                | `"Invalid JWT token: ..."`               |
 | Disallowed JWT algorithm             | `"JWT algorithm not allowed: RS256"`      |
+| JWT `kid` unknown or not allowed on the endpoint | `"JWT key not allowed"`       |
+| JWT without `kid` and no `"default"` key | `"JWT key id (kid) is required"`      |
+| Missing required claim, wrong audience/issuer | `"Invalid JWT token: ..."`       |
 | JWT key misconfigured on the server  | `"Invalid authentication credentials"`   |
 
-> Enabling `"jwt"` without `AUTH_JWT_SECRET_KEY` raises `ValueError` when the
-> `AuthDependency` is created, so the misconfiguration fails at startup.
+> Enabling `"jwt"` without any JWT key configured, or `"jwt:<id>"` with an unknown id,
+> raises `ValueError` when the `AuthDependency` is created, so the misconfiguration
+> fails at startup.
 
 ---
 
@@ -208,6 +248,9 @@ Test coverage includes:
 - Valid JWT, expired JWT, JWT ignored when `"jwt"` is not enabled
 - JWT enabled without a secret (fails at startup, never HTTP 500)
 - No credentials
+- Multiple JWT keys: `kid` selection, `"jwt:<id>"` restriction, `"default"` key for tokens without `kid`, per-key algorithms, audience, issuer, leeway and required claims
+- `AUTH_JWT_KEYS` validation and the deprecated `AUTH_JWT_SECRET_KEY` alias
+- Installing without the `jwt` extra
 - Global auth over HTTP: `PublicRoute` opt-out, route-level widening/narrowing, principal from a handler parameter
 - `AUTH_API_KEYS` validation in settings (JSON string, dict, invalid JSON)
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastapi-auth-manager-dep"
-version = "0.1.1"
+version = "0.2.0"
 authors = [
   { name="Edmundo Andrade", email="edmon.af@gmail.com" },
 ]
@@ -39,13 +39,13 @@ dependencies = [
     "fastapi>=0.100.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
-    "pyjwt>=2.4.0",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx2>=2.0.0",
+    "pyjwt>=2.4.0",
     "pytest>=7.0.0",
-    "httpx>=0.24.0",
     "pytest-cov>=7.1.0",
 ]
 
@@ -68,5 +68,13 @@ Documentation = "https://github.com/edmon1024/fastapi-auth-manager-dep"
 Repository = "https://github.com/edmon1024/fastapi-auth-manager-dep"
 Issues = "https://github.com/edmon1024/fastapi-auth-manager-dep/issues"
 Changelog = "https://github.com/edmon1024/fastapi-auth-manager-dep/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+jwt = [
+    "pyjwt>=2.4.0",
+]
+all = [
+    "fastapi-auth-manager-dep[jwt]",
+]
 
 

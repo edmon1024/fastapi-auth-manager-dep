@@ -4,7 +4,9 @@ Full usage example for the authentication dependency.
 Required environment variables for this example:
     AUTH_ADMIN_API_KEY=super-secret-admin
     AUTH_API_KEYS='{"key-reports-1": "reports", "key-billing-1": "billing", "key-billing-2": "billing"}'
-    AUTH_JWT_SECRET_KEY=jwt-secret
+    AUTH_JWT_KEYS='{"mobile": {"secret": "mobile-secret"}, "partner": {"secret": "partner-secret", "audience": "billing-api"}}'
+
+JWT endpoints need the jwt extra (pip install "fastapi-auth-manager-dep[jwt]").
 
 Run from the repository root with:
     uv run --with uvicorn uvicorn examples.example_app:app --reload
@@ -58,6 +60,7 @@ async def billing(
         "method": principal.method,
         "role": principal.role,
         "sub": principal.sub,
+        "jwt_key_id": principal.key_id,
     }
 
 
@@ -73,11 +76,11 @@ async def any_key():
 
 
 # ---------------------------------------------------------------------------
-# 6. User JWT + ADMIN key (no additional keys)
+# 6. User JWT signed with the "mobile" key only (kid header) + ADMIN key
 # ---------------------------------------------------------------------------
 @app.get("/me")
 async def me(
-    principal: AuthPrincipal = Depends(AuthDependency(valid_token_types={"jwt"})),
+    principal: AuthPrincipal = Depends(AuthDependency(valid_token_types={"jwt:mobile"})),
 ):
     return {"sub": principal.sub, "jwt_payload": principal.payload}
 
