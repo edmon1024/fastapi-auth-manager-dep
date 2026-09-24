@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-09-24
+
+### Changed
+
+- README: how to issue JWT tokens with the `kid` header (PyJWT example, how the server
+  selects and verifies the key, common mistakes), and the reserved `"default"` key: where
+  it comes from (single secret or `AUTH_JWT_KEYS`) and how to select it with
+  `"jwt:default"`.
+- Tests for `"jwt:default"`, a `kid` claim in the payload (ignored) and a non-string `kid`.
+
 ## [0.2.1] - 2026-09-24
 
 ### Changed
@@ -89,6 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PublicRoute`: opt-out dependency for public endpoints under global authentication.
 - `401 Unauthorized` responses with specific `detail` messages.
 
+[0.2.2]: https://github.com/edmon1024/fastapi-auth-manager-dep/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/edmon1024/fastapi-auth-manager-dep/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/edmon1024/fastapi-auth-manager-dep/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/edmon1024/fastapi-auth-manager-dep/compare/v0.1.0...v0.1.1

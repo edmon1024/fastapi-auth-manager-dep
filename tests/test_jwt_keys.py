@@ -3,6 +3,8 @@ Tests for multiple JWT keys (AUTH_JWT_KEYS), "jwt:<key-id>" and the optional pyj
 Run with: uv run pytest tests/test_jwt_keys.py -v
 """
 
+import base64
+import json
 import time
 
 import jwt as pyjwt
@@ -175,6 +177,28 @@ async def test_unknown_kid_rejected(auth_any_jwt):
 
 
 @pytest.mark.anyio
+async def test_non_string_kid_rejected(auth_any_jwt):
+    # pyjwt refuses to encode it, so build the token by hand
+    def b64(data):
+        return base64.urlsafe_b64encode(json.dumps(data).encode()).rstrip(b"=").decode()
+
+    token = f"{b64({'alg': 'HS256', 'kid': 123})}.{b64({'exp': exp_in(60)})}.c2ln"
+    await assert_401(auth_any_jwt, token, "Invalid JWT token: Key ID header parameter must be a string")
+
+
+@pytest.mark.anyio
+async def test_kid_claim_in_payload_is_ignored(auth_any_jwt):
+    # kid must go in the header; as a claim the token has no kid
+    token = pyjwt.encode({"kid": "mobile", "exp": exp_in(60)}, MOBILE_SECRET, algorithm="HS256")
+    await assert_401(auth_any_jwt, token, "JWT key id (kid) is required")
+
+    keys = {**JWT_KEYS, "default": {"secret": DEFAULT_SECRET}}
+    dep = AuthDependency(valid_token_types={"jwt"}, settings=make_settings(AUTH_JWT_KEYS=keys))
+    detail = await assert_401(dep, token)
+    assert detail.startswith("Invalid JWT token")  # verified with the "default" secret
+
+
+@pytest.mark.anyio
 async def test_key_selector_restricts_endpoint():
     dep = AuthDependency(valid_token_types={"jwt:partner"}, settings=make_settings())
     token = make_token(MOBILE_SECRET, kid="mobile", exp=exp_in(60))
@@ -203,6 +227,32 @@ async def test_legacy_secret_accepts_tokens_without_kid_or_exp():
     dep = AuthDependency(valid_token_types={"jwt"}, settings=settings)
     principal = await dep(credentials=bearer(make_token(DEFAULT_SECRET, sub="u")), api_key=None)
     assert principal.key_id == "default"
+
+
+@pytest.mark.anyio
+async def test_default_key_selector_with_explicit_default_key():
+    keys = {**JWT_KEYS, "default": {"secret": DEFAULT_SECRET}}
+    dep = AuthDependency(valid_token_types={"jwt:default"}, settings=make_settings(AUTH_JWT_KEYS=keys))
+    # without kid, or with kid "default"
+    for kid in (None, "default"):
+        principal = await dep(credentials=bearer(make_token(DEFAULT_SECRET, kid=kid, exp=exp_in(60))), api_key=None)
+        assert principal.key_id == "default"
+    await assert_401(dep, make_token(MOBILE_SECRET, kid="mobile", exp=exp_in(60)), "JWT key not allowed")
+
+
+@pytest.mark.anyio
+async def test_default_key_selector_with_legacy_secret():
+    with pytest.warns(DeprecationWarning):
+        settings = make_settings(AUTH_JWT_SECRET_KEY=DEFAULT_SECRET)  # plus the "mobile"/"partner" keys
+    dep = AuthDependency(valid_token_types={"jwt:default"}, settings=settings)
+    principal = await dep(credentials=bearer(make_token(DEFAULT_SECRET, sub="u")), api_key=None)
+    assert principal.key_id == "default"
+    await assert_401(dep, make_token(MOBILE_SECRET, kid="mobile", exp=exp_in(60)), "JWT key not allowed")
+
+
+def test_default_key_selector_without_default_key_raises_at_init():
+    with pytest.raises(ValueError, match="default"):
+        AuthDependency(valid_token_types={"jwt:default"}, settings=make_settings())
 
 
 @pytest.mark.anyio
