@@ -1,5 +1,12 @@
 # fastapi-auth-manager-dep
 
+[![CI](https://img.shields.io/github/actions/workflow/status/edmon1024/fastapi-auth-manager-dep/ci.yml?branch=main&logo=github&label=CI)](https://github.com/edmon1024/fastapi-auth-manager-dep/actions?query=event%3Apush+branch%3Amain+workflow%3ACI)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/edmon1024/fastapi-auth-manager-dep/codeql.yml?branch=main&logo=github&label=CodeQL)](https://github.com/edmon1024/fastapi-auth-manager-dep/actions?query=workflow%3ACodeQL)
+[![Coverage](https://codecov.io/gh/edmon1024/fastapi-auth-manager-dep/graph/badge.svg?branch=main)](https://codecov.io/gh/edmon1024/fastapi-auth-manager-dep)
+[![pypi](https://img.shields.io/pypi/v/fastapi-auth-manager-dep.svg)](https://pypi.org/project/fastapi-auth-manager-dep/)
+[![versions](https://img.shields.io/pypi/pyversions/fastapi-auth-manager-dep.svg)](https://pypi.org/project/fastapi-auth-manager-dep/)
+[![license](https://img.shields.io/github/license/edmon1024/fastapi-auth-manager-dep.svg)](https://github.com/edmon1024/fastapi-auth-manager-dep/blob/main/LICENSE)
+
 Reusable authentication dependency for FastAPI with **API Key** and **JWT Bearer** support.
 
 - One mandatory ADMIN key via envvar (super-key, always valid)

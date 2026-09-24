@@ -16,6 +16,9 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Codecov upload via OIDC, no token secret
     strategy:
       fail-fast: false
       matrix:
@@ -34,7 +37,16 @@ jobs:
 
       # Coverage threshold (fail_under) lives in pyproject.toml
       - name: Run tests with coverage
-        run: uv run --locked pytest -v --cov
+        run: uv run --locked pytest -v --cov --cov-report=term --cov-report=xml
+
+      # One report is enough for the badge; skipped on fork PRs (no OIDC token)
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.13' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          files: coverage.xml
+          use_oidc: true
+          fail_ci_if_error: false
 
       # Starlette warns when TestClient falls back to the unmaintained httpx
       - name: TestClient uses httpx2
