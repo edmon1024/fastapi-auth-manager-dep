@@ -2,7 +2,6 @@ name: Release
 
 # Publishes to PyPI when a version tag is pushed, e.g.:
 #   git tag -a v0.1.1 -m v0.1.1 && git push origin v0.1.1
-# See RELEASING.md for the full procedure and the one-time setup.
 
 on:
   push:
