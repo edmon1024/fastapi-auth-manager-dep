@@ -227,4 +227,4 @@ class AuthSettings(BaseSettings):
 
 @lru_cache
 def get_auth_settings() -> AuthSettings:
-    return AuthSettings()
+    return AuthSettings()  # type: ignore[call-arg]  # required fields come from the env

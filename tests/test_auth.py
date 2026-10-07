@@ -392,3 +392,17 @@ def test_settings_keys_for_label():
     assert s.keys_for_label("reports") == {"k1", "k2"}
     assert s.keys_for_label("billing") == {"k3"}
     assert s.keys_for_label("nonexistent") == set()
+
+
+def test_get_auth_settings_reads_env_and_is_cached(monkeypatch, tmp_path):
+    from fastapi_auth.settings import get_auth_settings
+
+    monkeypatch.chdir(tmp_path)  # no local .env
+    monkeypatch.setenv('AUTH_ADMIN_API_KEY', 'env-admin-key')
+    get_auth_settings.cache_clear()
+    try:
+        first = get_auth_settings()
+        assert first.AUTH_ADMIN_API_KEY == 'env-admin-key'
+        assert get_auth_settings() is first
+    finally:
+        get_auth_settings.cache_clear()

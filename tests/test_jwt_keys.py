@@ -212,6 +212,44 @@ async def test_missing_kid_without_default_key_rejected(auth_any_jwt):
 
 
 @pytest.mark.anyio
+async def test_single_key_selector_accepts_token_without_kid():
+    dep = AuthDependency(valid_token_types={"jwt:mobile"}, settings=make_settings())
+    token = make_token(MOBILE_SECRET, sub="user-3", exp=exp_in(60))
+    principal = await dep(credentials=bearer(token), api_key=None)
+    assert principal.key_id == "mobile"
+
+
+@pytest.mark.anyio
+async def test_single_key_selector_still_checks_signature_without_kid():
+    dep = AuthDependency(valid_token_types={"jwt:mobile"}, settings=make_settings())
+    token = make_token(PARTNER_SECRET, exp=exp_in(60))
+    detail = await assert_401(dep, token)
+    assert detail.startswith("Invalid JWT token")
+
+
+@pytest.mark.anyio
+async def test_single_key_selector_rejects_other_kid():
+    dep = AuthDependency(valid_token_types={"jwt:mobile"}, settings=make_settings())
+    token = make_token(PARTNER_SECRET, kid="partner", algorithm="HS512", exp=exp_in(60))
+    await assert_401(dep, token, "JWT key not allowed")
+
+
+@pytest.mark.anyio
+async def test_multiple_key_selectors_still_require_kid():
+    dep = AuthDependency(valid_token_types={"jwt:mobile", "jwt:partner"}, settings=make_settings())
+    token = make_token(MOBILE_SECRET, exp=exp_in(60))
+    await assert_401(dep, token, "JWT key id (kid) is required")
+
+
+@pytest.mark.anyio
+async def test_generic_jwt_with_single_key_still_requires_kid():
+    settings = make_settings(AUTH_JWT_KEYS={"mobile": JWT_KEYS["mobile"]})
+    dep = AuthDependency(valid_token_types={"jwt"}, settings=settings)
+    token = make_token(MOBILE_SECRET, exp=exp_in(60))
+    await assert_401(dep, token, "JWT key id (kid) is required")
+
+
+@pytest.mark.anyio
 async def test_missing_kid_uses_default_key():
     keys = {**JWT_KEYS, "default": {"secret": DEFAULT_SECRET}}
     dep = AuthDependency(valid_token_types={"jwt"}, settings=make_settings(AUTH_JWT_KEYS=keys))

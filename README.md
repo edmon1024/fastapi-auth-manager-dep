@@ -130,6 +130,10 @@ Things to know:
   ignored: the token counts as having no `kid`.
 - Without `kid`, the token is verified with the [`"default"` key](#the-default-key). If
   there is none, it is rejected with `"JWT key id (kid) is required"`.
+  Exception: an endpoint pinned to a single key with `"jwt:<id>"` verifies tokens without
+  `kid` with that key, so issuers don't need to send it. A `kid` naming a different key is
+  still rejected with `"JWT key not allowed"`. With `"jwt"` or several `"jwt:<id>"`, `kid`
+  stays required to pick the key.
 - `kid` does not grant anything by itself. A token that says `kid: "partner"` but was
   signed with another secret fails the signature check.
 - Use a different secret per key. HMAC secrets should be at least as long as the hash
@@ -317,7 +321,7 @@ All authentication errors return HTTP `401 Unauthorized` with a `detail` field:
 | Invalid JWT signature                | `"Invalid JWT token: ..."`               |
 | Disallowed JWT algorithm             | `"JWT algorithm not allowed: RS256"`      |
 | JWT `kid` unknown or not allowed on the endpoint | `"JWT key not allowed"`       |
-| JWT without `kid` and no `"default"` key | `"JWT key id (kid) is required"`      |
+| JWT without `kid`, no `"default"` key, and the endpoint is not pinned to a single `"jwt:<id>"` | `"JWT key id (kid) is required"`      |
 | Missing required claim, wrong audience/issuer | `"Invalid JWT token: ..."`       |
 | JWT key misconfigured on the server  | `"Invalid authentication credentials"`   |
 
