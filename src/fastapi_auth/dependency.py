@@ -1,6 +1,6 @@
 import logging
 from enum import Enum
-from typing import Optional
+from typing import Optional, cast
 
 from fastapi import HTTPException, Request, Security, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
@@ -45,6 +45,8 @@ class AuthDependency:
     Keys are defined in the ``AUTH_JWT_KEYS`` envvar. The token's ``kid`` header
     selects the key; tokens without ``kid`` use the key with id ``"default"``.
     ``"jwt"`` accepts every configured key, ``"jwt:<key-id>"`` only that one.
+    On an endpoint pinned to a single ``"jwt:<key-id>"``, tokens without ``kid``
+    are verified with that key (a ``kid`` that names another key is still rejected).
 
     Api-key logic
     -------------
@@ -132,10 +134,16 @@ class AuthDependency:
         if self._allow_all_keys:
             self._valid_token_types: set[str] = set()
         else:
-            self._valid_token_types = self._normalize(valid_token_types)
+            self._valid_token_types = self._normalize(cast("set[str | Enum] | None", valid_token_types))
 
         # Fail at startup instead of on every request
         self._jwt_keys = self._resolve_jwt_keys()
+
+        # A token without ``kid`` is verified with the "default" key, except on an
+        # endpoint pinned to a single key ("jwt:<id>" only): there it is that key.
+        self._kidless_key_id = DEFAULT_JWT_KEY_ID
+        if len(self._jwt_keys) == 1 and _JWT not in self._valid_token_types:
+            self._kidless_key_id = next(iter(self._jwt_keys))
 
     def _resolve_jwt_keys(self) -> "dict[str, JWTKeyConfig]":
         """Returns the JWT keys this instance accepts, by id (empty → JWT disabled)."""
@@ -228,7 +236,7 @@ class AuthDependency:
         """
         try:
             header = pyjwt.get_unverified_header(token)
-            kid = header.get("kid", DEFAULT_JWT_KEY_ID)
+            kid = header.get("kid", self._kidless_key_id)
             key = self._jwt_keys.get(kid) if isinstance(kid, str) else None
             if key is None:
                 raise HTTPException(

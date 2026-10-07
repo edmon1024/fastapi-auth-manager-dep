@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-10-07
+
+### Added
+
+- An endpoint pinned to a single key with `"jwt:<id>"` verifies tokens without `kid` with
+  that key, so issuers don't need to send it. A `kid` naming another key is still rejected
+  with `"JWT key not allowed"`. With `"jwt"` or several `"jwt:<id>"`, `kid` is still
+  required (or the `"default"` key is used).
+
+### Fixed
+
+- mypy errors in `get_auth_settings()` and the `valid_token_types` normalisation (no
+  runtime change).
+
 ## [0.2.2] - 2026-09-24
 
 ### Changed
@@ -99,6 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PublicRoute`: opt-out dependency for public endpoints under global authentication.
 - `401 Unauthorized` responses with specific `detail` messages.
 
+[0.3.0]: https://github.com/edmon1024/fastapi-auth-manager-dep/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/edmon1024/fastapi-auth-manager-dep/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/edmon1024/fastapi-auth-manager-dep/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/edmon1024/fastapi-auth-manager-dep/compare/v0.1.1...v0.2.0
